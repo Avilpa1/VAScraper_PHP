@@ -1,26 +1,39 @@
 <?php
- 
- require __DIR__.'/../vendor/autoload.php';
-
+ini_set('max_execution_time', 1800);
+require __DIR__.'/../vendor/autoload.php';
 use Symfony\Component\DomCrawler\Crawler;
-
+$locationArray = [];
 function getLocations() {
     $MainUrl = 'www.va.gov/directory/guide/region.asp?ID=1001';
     $client = new \GuzzleHttp\Client(['verify' => false]);
     $response = $client->request('GET', $MainUrl);
     $html = ''.$response->getBody();
     $crawler = new Crawler($html);
-
+    
     $crawler->filter('#tier4innerContent > table')->filter('a')->each(function (Crawler $node, $i) {
-        //echo $node->html();
-        echo $node->attr('href');
-        echo '<br>';
+        $locations = $node->attr('href');
+        
+        if (strpos($locations, 'http://') !== false) {
+            global $locationArray;
+            if (!in_array($locations, $locationArray)) {
+                global $locationArray;
+                $locationArray[] = $node->attr('href');
+            }
+        }
+
     });
 
+    global $locationArray;
+    foreach ($locationArray as $value) {
+        print_r($value);
+        echo '<br>';
+        getLocationInfo($value);
+    }
+    echo 'Done.';
 }
 
-function getLocationInfo() {
-    $url = 'https://www.boston.va.gov/';
+function getLocationInfo($url) {
+    $url = 'http://www.boston.va.gov/locations/Causeway_Street_Boston_CBOC.asp';
     $client = new \GuzzleHttp\Client(['verify' => false]);
     $response = $client->request('GET', $url);
     $html = ''.$response->getBody();
@@ -56,7 +69,7 @@ function getLocationInfo() {
             echo $zip; //Zip
             echo '<br>';
             echo '<br>';
-            geoCodeAddress($locationName[$i], $address, $city, $state, $zip);
+            // geoCodeAddress($locationName[$i], $address, $city, $state, $zip);
         });
     });
 
@@ -107,12 +120,10 @@ function geoCodeAddress($locationName, $address, $city, $state, $zip) {
 
 function saveToCSV($output) {
     $file =fopen('test.csv', 'a');
-
     fputcsv($file, $output);
-
     fclose($file);
 }
 
 
-// getLocations();
-getLocationInfo();
+getLocations();
+// getLocationInfo();
