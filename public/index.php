@@ -1,60 +1,72 @@
 <?php
+ 
+ require __DIR__.'/../vendor/autoload.php';
 
-/**
- * Laravel - A PHP Framework For Web Artisans
- *
- * @package  Laravel
- * @author   Taylor Otwell <taylor@laravel.com>
- */
+use Symfony\Component\DomCrawler\Crawler;
 
-define('LARAVEL_START', microtime(true));
+// $url = 'www.va.gov/directory/guide/region.asp?ID=1001';
 
-/*
-|--------------------------------------------------------------------------
-| Register The Auto Loader
-|--------------------------------------------------------------------------
-|
-| Composer provides a convenient, automatically generated class loader for
-| our application. We just need to utilize it! We'll simply require it
-| into the script here so that we don't have to worry about manual
-| loading any of our classes later on. It feels great to relax.
-|
-*/
 
-require __DIR__.'/../vendor/autoload.php';
+$url = 'https://www.boston.va.gov/';
 
-/*
-|--------------------------------------------------------------------------
-| Turn On The Lights
-|--------------------------------------------------------------------------
-|
-| We need to illuminate PHP development, so let us turn on the lights.
-| This bootstraps the framework and gets it ready for use, then it
-| will load up this application so that we can run it and send
-| the responses back to the browser and delight our users.
-|
-*/
+$client = new \GuzzleHttp\Client(['verify' => false]);
+$response = $client->request('GET', $url);
+ 
+$html = ''.$response->getBody();
 
-$app = require_once __DIR__.'/../bootstrap/app.php';
+$crawler = new Crawler($html);
 
-/*
-|--------------------------------------------------------------------------
-| Run The Application
-|--------------------------------------------------------------------------
-|
-| Once we have the application, we can handle the incoming request
-| through the kernel, and send the associated response back to
-| the client's browser allowing them to enjoy the creative
-| and wonderful application we have prepared for them.
-|
-*/
+// $nodeValues = $crawler->filter('#tier4innerContent > table')->filter('a')->each(function (Crawler $node, $i) {
+//     //echo $node->html();
+//     echo $node->attr('href');
+//     echo '<br>';
+// });
 
-$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 
-$response = $kernel->handle(
-    $request = Illuminate\Http\Request::capture()
-);
+$nodeValues = $crawler->filter('#address-widget > p')->each(function (Crawler $node, $i) {
+    $addressData = $node->html();
 
-$response->send();
+    $arr = explode("\n", $addressData);
+    $arr2 = explode(",", $arr[2]);
+    $arr3 = explode(" ", $arr2[1]);
 
-$kernel->terminate($request, $response);
+    echo $arr[1]; //Address
+    echo $arr2[0]; //City
+    echo '<br>';
+    echo $arr3[1]; //State
+    echo '<br>';
+    echo $arr3[2]; //Zip
+    echo '<br>';
+
+    geoCodeAddress($arr[1], $arr2[0], $arr3[1], $arr3[2]);
+});
+
+function geoCodeAddress($street, $city, $state, $zip) {
+    $client = new \GuzzleHttp\Client(['verify' => false]);
+    
+    $geoCodeURL = 'https://geoservices.tamu.edu/Services/Geocode/WebService/GeocoderWebServiceHttpNonParsed_V04_01.aspx';
+    
+    $geocodeResponse = $client->request('GET', $geoCodeURL, [
+                                        'query' => ['streetAddress' => $street,
+                                                    'city' => $city,
+                                                    'state' => $state,
+                                                    'zip' => $zip,
+                                                    'apikey' => '3f38f179eb154b6498643df2e2d783ef',
+                                                    'format' => 'json',
+                                                    'notStore'=> 'false',
+                                                    'version' => '4.01'  
+                                                ]
+    ])->getBody();
+    
+    
+    $data = json_decode($geocodeResponse);
+    
+    echo $data->OutputGeocodes[0]->OutputGeocode->Latitude;
+    echo '<br>';
+    echo $data->OutputGeocodes[0]->OutputGeocode->Longitude;
+    echo '<br>';
+    echo '<br>';
+}
+
+
+
