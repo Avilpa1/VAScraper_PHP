@@ -4,50 +4,72 @@
 
 use Symfony\Component\DomCrawler\Crawler;
 
-// $url = 'www.va.gov/directory/guide/region.asp?ID=1001';
+function getLocations() {
+    $MainUrl = 'www.va.gov/directory/guide/region.asp?ID=1001';
+    $client = new \GuzzleHttp\Client(['verify' => false]);
+    $response = $client->request('GET', $MainUrl);
+    $html = ''.$response->getBody();
+    $crawler = new Crawler($html);
+
+    $crawler->filter('#tier4innerContent > table')->filter('a')->each(function (Crawler $node, $i) {
+        //echo $node->html();
+        echo $node->attr('href');
+        echo '<br>';
+    });
+
+}
+
+function getLocationInfo() {
+    $url = 'https://www.boston.va.gov/';
+    $client = new \GuzzleHttp\Client(['verify' => false]);
+    $response = $client->request('GET', $url);
+    $html = ''.$response->getBody();
+    $crawler = new Crawler($html);
+    
+    $crawler->filter('#address-widget')->each(function (Crawler $node, $i) {  
+        $out = $node->filter('h3')->each(function (Crawler $node2, $i) {
+            global $locationName;
+            $locationName[] = $node2->html();
+        });
+    
+        $node->filter('p')->each(function (Crawler $node3, $i) {
+            $addressData = $node3->html();
+    
+            $arr = explode("\n", $addressData);
+            $arr2 = explode(",", $arr[2]);
+            $arr3 = explode(" ", $arr2[1]);
+            $address = str_replace('<br>' ,'' ,$arr[1]);
+            $city = $arr2[0];
+            $state = $arr3[1];
+            $zip = str_replace('<br>' ,'' ,$arr3[2]);
+    
+            global $locationName;
+    
+            echo $locationName[$i];
+            echo '<br>';
+            echo $address; //Address
+            echo '<br>';
+            echo $city; //City
+            echo '<br>';
+            echo $state; //State
+            echo '<br>';
+            echo $zip; //Zip
+            echo '<br>';
+            echo '<br>';
+            geoCodeAddress($locationName[$i], $address, $city, $state, $zip);
+        });
+    });
+
+}
 
 
-$url = 'https://www.boston.va.gov/';
-
-$client = new \GuzzleHttp\Client(['verify' => false]);
-$response = $client->request('GET', $url);
- 
-$html = ''.$response->getBody();
-
-$crawler = new Crawler($html);
-
-// $nodeValues = $crawler->filter('#tier4innerContent > table')->filter('a')->each(function (Crawler $node, $i) {
-//     //echo $node->html();
-//     echo $node->attr('href');
-//     echo '<br>';
-// });
-
-
-$nodeValues = $crawler->filter('#address-widget > p')->each(function (Crawler $node, $i) {
-    $addressData = $node->html();
-
-    $arr = explode("\n", $addressData);
-    $arr2 = explode(",", $arr[2]);
-    $arr3 = explode(" ", $arr2[1]);
-
-    echo $arr[1]; //Address
-    echo $arr2[0]; //City
-    echo '<br>';
-    echo $arr3[1]; //State
-    echo '<br>';
-    echo $arr3[2]; //Zip
-    echo '<br>';
-
-    geoCodeAddress($arr[1], $arr2[0], $arr3[1], $arr3[2]);
-});
-
-function geoCodeAddress($street, $city, $state, $zip) {
+function geoCodeAddress($locationName, $address, $city, $state, $zip) {
     $client = new \GuzzleHttp\Client(['verify' => false]);
     
     $geoCodeURL = 'https://geoservices.tamu.edu/Services/Geocode/WebService/GeocoderWebServiceHttpNonParsed_V04_01.aspx';
     
     $geocodeResponse = $client->request('GET', $geoCodeURL, [
-                                        'query' => ['streetAddress' => $street,
+                                        'query' => ['streetAddress' => $address,
                                                     'city' => $city,
                                                     'state' => $state,
                                                     'zip' => $zip,
@@ -58,15 +80,39 @@ function geoCodeAddress($street, $city, $state, $zip) {
                                                 ]
     ])->getBody();
     
-    
     $data = json_decode($geocodeResponse);
+
+    $lat = $data->OutputGeocodes[0]->OutputGeocode->Latitude;
+    $lng = $data->OutputGeocodes[0]->OutputGeocode->Longitude;
     
-    echo $data->OutputGeocodes[0]->OutputGeocode->Latitude;
+    echo $lat;
     echo '<br>';
-    echo $data->OutputGeocodes[0]->OutputGeocode->Longitude;
+    echo $lng;
     echo '<br>';
     echo '<br>';
+    
+    $output = [
+        'locationName' => $locationName,
+        'address' => $address,
+        'city' => $city,
+        'state' => $state,
+        'zip' => $zip,
+        'lat' => $lng,
+        'lng' => $lng
+    ];
+
+    //print_r($output);
+    saveToCSV($output);
+}
+
+function saveToCSV($output) {
+    $file =fopen('test.csv', 'a');
+
+    fputcsv($file, $output);
+
+    fclose($file);
 }
 
 
-
+// getLocations();
+getLocationInfo();
