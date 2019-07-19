@@ -55,7 +55,7 @@ function getLocationInfo($url) {
     $response = $client->request('GET', $url);
     $html = ''.$response->getBody();
     $crawler = new Crawler($html);
-    
+    echo $response->getStatusCode();
     $crawler->filter('#address-widget')->each(function (Crawler $node, $i) use ($url) {  
         $out = $node->filter('h3')->each(function (Crawler $node2, $i) {
             global $locationName;
