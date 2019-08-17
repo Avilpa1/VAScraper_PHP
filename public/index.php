@@ -4,14 +4,26 @@ require __DIR__.'/../vendor/autoload.php';
 use Symfony\Component\DomCrawler\Crawler;
 
 $locationArray = [];
+$region;
+$locationType = 'null';
 
 function startLoop() {
     $baseURL = 'www.va.gov/directory/guide/region.asp?ID=';
-    for ($x = 1001; $x <= 1024; $x++) {
-        echo $baseURL.$x;
-        echo '<br>';
-        getLocations($baseURL.$x);
+    $pages = ['1001','1002','1004','1005','1006','1007','1008','1009','1010','1012','1015','1016','1017','1019','1020','1021','1022','1023'];
+
+    foreach($pages as $pageNum){
+        // echo $baseURL.$pageNum;
+        // echo '<br>';
+        getLocations($baseURL.$pageNum);
     }
+}
+
+function start($id) {
+    global $region;
+    $region = $id;
+
+    $baseURL = 'www.va.gov/directory/guide/region.asp?ID=';
+    getLocations($baseURL.$region);
 }
 
 function getLocations($url) {
@@ -24,11 +36,16 @@ function getLocations($url) {
         $locations = $node->attr('href');
         
         if (strpos($locations, 'http://') !== false) {
-            global $locationArray;
-            if (!in_array($locations, $locationArray)) {
+            if (strpos($locations, 'www.visn') == true) {
+                
+            } else {
                 global $locationArray;
-                $locationArray[] = $node->attr('href');
+                if (!in_array($locations, $locationArray)) {
+                    global $locationArray;
+                    $locationArray[] = $node->attr('href');
+                }
             }
+
         }
     });
 
@@ -40,7 +57,9 @@ function getLocations($url) {
 }
 
 function detectPageType($url) {
-    if (strpos($url, '.asp') !== false) {
+    if (strpos($url, 'vaww') !== false) {
+        echo 'bad URL';
+    } elseif (strpos($url, '.asp') !== false) {
         getLocationInfoASP($url);
     } elseif (strpos($url, '.gov') !== false) {
         getLocationInfo($url);
@@ -55,7 +74,7 @@ function getLocationInfo($url) {
     $response = $client->request('GET', $url);
     $html = ''.$response->getBody();
     $crawler = new Crawler($html);
-    echo $response->getStatusCode();
+    // echo $response->getStatusCode();
     $crawler->filter('#address-widget')->each(function (Crawler $node, $i) use ($url) {  
         $out = $node->filter('h3')->each(function (Crawler $node2, $i) {
             global $locationName;
@@ -75,6 +94,7 @@ function getLocationInfo($url) {
     
             global $locationName;
             global $url;
+            global $locationType;
 
             echo $url2;
             echo '<br>';
@@ -89,10 +109,33 @@ function getLocationInfo($url) {
             echo $zip;     //Zip
             echo '<br>';
             echo '<br>';
-            geoCodeAddress($locationName[$i], $address, $city, $state, $zip);
+
+            if (strpos($locationName[$i], 'Clinic') == true) {
+                global $locationType;
+                $locationType = 'Clinic';
+            } else if ( strpos($locationName[$i], 'Medical Center') == true) {
+                global $locationType;
+                $locationType = 'Medical Center';
+            } else if ( strpos($locationName[$i], 'Hospital') == true) {
+                global $locationType;
+                $locationType = 'Medical Center';
+            } else if ( strpos($locationName[$i], 'Healthcare System') == true) {
+                global $locationType;
+                $locationType = 'Medical Center';
+            } else if ( strpos($locationName[$i], 'Health care System') == true) {
+                global $locationType;
+                $locationType = 'Medical Center';
+            } else {
+                global $locationType;
+                $locationType = 'Other';   
+            }
+
+            geoCodeAddress($locationName[$i], $address, $city, $state, $zip, $url2, $locationType);
+            
         });
     });
-
+    global $locationName;
+    array_splice($locationName, 0);
 }
 
 function getLocationInfoASP($url) {
@@ -101,6 +144,10 @@ function getLocationInfoASP($url) {
     $response = $client->request('GET', $url);
     $html = ''.$response->getBody();
     $crawler = new Crawler($html);
+    echo $response->getStatusCode();
+    // if($parsedString == '') {
+    //     print_r($url.' not found');
+    // }
     
     $node = $crawler->filter('script');
         $nodeToString = print_r($node,true);
@@ -114,7 +161,7 @@ function getLocationInfoASP($url) {
         $lat          = getBetween($parsedString, 'lat":', ',"');
         $lng          = getBetween($parsedString, 'long":', ',"');
         // print_r($parsedString);
-        // echo '<br>';
+        echo '<br>';
         print_r($url);
         echo '<br>';
         print_r($locationName);
@@ -133,21 +180,38 @@ function getLocationInfoASP($url) {
         echo '<br>';
         echo '<br>';
 
+        if (strpos($locationName, 'Clinic') == true) {
+            global $locationType;
+            $locationType = 'Clinic';
+        } else if ( strpos($locationName, 'Medical Center') == true) {
+            global $locationType;
+            $locationType = 'Medical Center';
+        } else if ( strpos($locationName, 'Hospital') == true) {
+            global $locationType;
+            $locationType = 'Medical Center';
+        } else {
+            global $locationType;
+            $locationType = 'Other';   
+        }
+
         $output = [
+            'url' => $url,
+            'type' => $locationType,
             'locationName' => $locationName,
             'address' => $address,
             'city' => $city,
             'state' => $state,
             'zip' => $zip,
-            'lat' => $lng,
+            'lat' => $lat,
             'lng' => $lng
         ];
     
         saveToCSV($output);
+        sleep(4);
 }
 
 
-function geoCodeAddress($locationName, $address, $city, $state, $zip) {
+function geoCodeAddress($locationName, $address, $city, $state, $zip, $url, $locationType) {
     $client = new \GuzzleHttp\Client(['verify' => false]);
     
     $geoCodeURL = 'https://geoservices.tamu.edu/Services/Geocode/WebService/GeocoderWebServiceHttpNonParsed_V04_01.aspx';
@@ -157,7 +221,7 @@ function geoCodeAddress($locationName, $address, $city, $state, $zip) {
                                                     'city' => $city,
                                                     'state' => $state,
                                                     'zip' => $zip,
-                                                    'apikey' => '3f38f179eb154b6498643df2e2d783ef',
+                                                    'apikey' => '45e35a810755496a8b1e28d867559329',
                                                     'format' => 'json',
                                                     'notStore'=> 'false',
                                                     'version' => '4.01'  
@@ -176,20 +240,24 @@ function geoCodeAddress($locationName, $address, $city, $state, $zip) {
     echo '<br>';
     
     $output = [
-        'locationName' => $locationName,
-        'address' => $address,
-        'city' => $city,
-        'state' => $state,
-        'zip' => $zip,
-        'lat' => $lng,
-        'lng' => $lng
+        'url' => $url,
+        'type' => $locationType,
+        'locationName' => ltrim($locationName),
+        'address' => ltrim($address),
+        'city' => ltrim($city),
+        'state' => ltrim($state),
+        'zip' => ltrim($zip),
+        'lat' => $lat,
+        'lng' => $lng  
     ];
 
     saveToCSV($output);
 }
 
 function saveToCSV($output) {
-    $file =fopen('data.csv', 'a');
+    global $region;
+    $id = $region;
+    $file =fopen('regions/'.$id.'.csv', 'a');
     fputcsv($file, $output);
     fclose($file);
 }
@@ -208,6 +276,13 @@ function getBetween($string, $start = "", $end = ""){
     }
 }
 
+start('1023');
+
 // startLoop();
-getLocations('www.va.gov/directory/guide/region.asp?ID=1002');
-// getLocationInfo();
+
+// getLocations('www.va.gov/directory/guide/region.asp?ID=1001');
+// getLocationInfo('https://www.manchester.va.gov/');
+// getLocationInfoASP('http://www.sandiego.va.gov/locations/sorrentovalley.asp');
+
+
+// '1001','1002','1004','1005','1006','1007','1008','1009','1010','1012','1015','1016','1017','1019','1020','1021','1022','1023'
